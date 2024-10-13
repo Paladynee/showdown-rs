@@ -12,7 +12,6 @@ mod variables;
 mod ws_parse;
 mod ws_server;
 
-
 use http_server::create_http_server;
 use physics_server::physics_loop;
 use ws_server::create_ws_server;
