@@ -1,17 +1,30 @@
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::{
+    net::{TcpListener, TcpStream},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+    thread
+};
 
+use serde::{Deserialize, Serialize};
 use tungstenite::{Message, WebSocket};
 
-use crate::components::{GameState, GameStatePacket, Player, ServerMode, WebSocketClientData};
-use crate::variables;
-use crate::ws_parse::parse_websocket_message;
+use crate::physics_server::{GameState, GameStatePacket, Player};
+use crate::{ServerMode, WS_PORT, WS_TICKRATE};
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct ClientData {
+    player: Player,
+}
+
+impl ClientData {
+    fn is_valid(&self) -> bool {
+        !(self.player.hp < 0.0 || self.player.hp > 100.0)
+    }
+}
 
 // -------------------------------------- WS SERVER --------------------------------------
 pub fn create_ws_server(server_mode: ServerMode, game_state_mutex: Arc<Mutex<GameState>>) {
-    let port = variables::WS_PORT;
+    let port = WS_PORT;
     let ip_addr = match server_mode {
         ServerMode::Development => "127.0.0.1".parse().unwrap(),
         ServerMode::Production => local_ip_address::local_ip().unwrap(),
@@ -62,7 +75,7 @@ fn handle_websocket_connection(
     game_state_mutex: Arc<Mutex<GameState>>,
 ) {
     let mut last_update = Instant::now();
-    let update_interval = Duration::from_secs(1) / variables::WS_TICKRATE;
+    let update_interval = Duration::from_secs(1) / WS_TICKRATE;
 
     {
         let mut game_state = game_state_mutex.lock().unwrap();
@@ -150,7 +163,7 @@ fn websocket_tick(
 
 // -------------------------------------- GAMESTATE UPDATE --------------------------------------
 fn update_game_state(
-    client_data: WebSocketClientData,
+    client_data: ClientData,
     ws_identifier: &str,
     game_state_mutex: &Arc<Mutex<GameState>>,
 ) {
@@ -165,4 +178,13 @@ fn update_game_state(
         player.y = client_data.player.y;
         player.hp = client_data.player.hp;
     }
+}
+
+// -------------------------------------- WEBSOCKET PARSING -------------------------------------
+fn parse_websocket_message(message: &str) -> Option<ClientData> {
+    let parsed = serde_json::from_str(message);
+    // if let Ok(msg) = &parsed {
+    //     eprintln!("Recieved message: {:#?}", msg);
+    // }
+    parsed.ok()
 }

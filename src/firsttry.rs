@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 use std::{net, thread};
 use tungstenite::{accept, Message};
 
-use crate::util::get_content_type;
+use crate::http_server::get_content_type;
+
 
 const SERVER_TICKRATE: u32 = 2;
 

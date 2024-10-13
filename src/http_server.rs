@@ -1,19 +1,18 @@
-use crate::components::ServerMode;
-use crate::util;
-use crate::variables;
+use crate::{ServerMode, HTTP_PORT, PUBLIC_DIRECTORY};
 
-use std::io::Read;
-use std::io::Write;
-use std::thread;
 use std::{
+    io::{self, BufRead, BufReader, BufWriter, Write},
+    ffi::OsStr,
     fs::File,
-    io::{BufRead, BufReader, BufWriter},
     net::{TcpListener, TcpStream},
+    path::Path,
+    thread,
 };
+
 
 // -------------------------------------- HTTP SERVER --------------------------------------
 pub fn create_http_server(server_mode: ServerMode) {
-    let port = variables::HTTP_PORT;
+    let port = HTTP_PORT;
     let ip_addr = match server_mode {
         ServerMode::Development => "127.0.0.1".parse().unwrap(),
         ServerMode::Production => local_ip_address::local_ip().unwrap(),
@@ -40,7 +39,7 @@ pub fn create_http_server(server_mode: ServerMode) {
 
 // -------------------------------------- HTTP CONNECTION --------------------------------------
 fn handle_http_connection(stream: TcpStream) {
-    let public_directory = variables::get_public_directory();
+    let public_directory: &Path = PUBLIC_DIRECTORY.as_ref();
 
     let tcp_reader = BufReader::new(&stream);
     let mut tcp_writer = BufWriter::new(&stream);
@@ -74,49 +73,61 @@ fn handle_http_connection(stream: TcpStream) {
 
 
     // TODO: refactor file serving logic
+    const ERROR_RESPONSE: &[u8] = b"HTTP/1.1 404 NOT FOUND\r\n\r\n";
+
     match requested_path.canonicalize() {
         Ok(canonical_path) => {
-            if canonical_path.starts_with(public_directory) {
-                let file = File::open(&canonical_path);
-                match file {
-                    Ok(f) => {
-                        eprintln!(
-                            "[THREAD::HTTP] {}: Serve {}",
-                            stream.peer_addr().unwrap(),
-                            canonical_path.display()
-                        );
+            if !canonical_path.starts_with(public_directory) {
+                return;
+            }
 
-                        let file_size = f.metadata().unwrap().len();
-                        let content_type = util::get_content_type(&canonical_path);
+            let file = File::open(&canonical_path);
+            match file {
+                Ok(f) => {
+                    eprintln!(
+                        "[THREAD::HTTP] {}: Serve {}",
+                        stream.peer_addr().unwrap(),
+                        canonical_path.display()
+                    );
 
-                        let response_headers = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
-                            content_type, file_size
-                        );
+                    let file_size = f.metadata().unwrap().len();
+                    let content_type = get_content_type(&canonical_path);
 
-                        tcp_writer.write_all(response_headers.as_bytes()).unwrap();
+                    let response_headers = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
+                        content_type, file_size
+                    );
 
-                        let mut file_reader = BufReader::new(&f);
-                        let mut file_buffer = [0; 1024];
-                        loop {
-                            let bytes_read = file_reader.read(&mut file_buffer).unwrap();
-                            if bytes_read == 0 {
-                                break;
-                            }
-                            tcp_writer.write_all(&file_buffer[..bytes_read]).unwrap();
-                        }
-                    }
+                    tcp_writer.write_all(response_headers.as_bytes()).unwrap();
 
-                    Err(_) => {
-                        let error_response = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
-                        tcp_writer.write_all(error_response.as_bytes()).unwrap();
-                    }
+                    // Write file
+                    io::copy(&mut BufReader::new(&f), &mut tcp_writer).unwrap();
+                }
+                Err(_) => {
+                    tcp_writer.write_all(ERROR_RESPONSE).unwrap();
                 }
             }
         }
         Err(_) => {
-            let error_response = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
-            tcp_writer.write_all(error_response.as_bytes()).unwrap();
+            tcp_writer.write_all(ERROR_RESPONSE).unwrap();
         }
+    }
+}
+
+
+pub fn get_content_type(path: &Path) -> &'static str {
+    if let Some(ext) = path.extension().and_then(OsStr::to_str) {
+        match ext {
+            "html" => "text/html",
+            "css" => "text/css",
+            "js" => "application/javascript",
+            "png" => "image/png",
+            "jpg" => "image/jpeg",
+            "jpeg" => "image/jpeg",
+            "gif" => "image/gif",
+            _ => "application/octet-stream",
+        }
+    } else {
+        "application/octet-stream"
     }
 }

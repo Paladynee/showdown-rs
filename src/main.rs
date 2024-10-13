@@ -1,21 +1,28 @@
-use components::{GameState, ServerMode};
+use std::{env, thread, sync::{Arc, Mutex}};
 
-use std::env;
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-mod components;
 mod firsttry;
 mod http_server;
 mod physics_server;
-mod util;
-mod variables;
-mod ws_parse;
 mod ws_server;
 
 use http_server::create_http_server;
-use physics_server::create_physics_server;
+use physics_server::{create_physics_server, GameState};
 use ws_server::create_ws_server;
+
+pub const HTTP_PORT: u16 = 8080;
+pub const WS_PORT: u16 = 8081;
+pub const WS_TICKRATE: u32 = 30;
+pub const PHYSICS_TICKRATE: u32 = 60;
+
+pub const PUBLIC_DIRECTORY: &str = "./public/";
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ServerMode {
+    // hosts the server on 127.0.0.1
+    Development,
+    // hosts the server on local_ip_address::local_ip()
+    Production,
+}
 
 fn main() {
     let args = env::args().collect::<Vec<_>>();
@@ -25,7 +32,7 @@ fn main() {
         ServerMode::Development
     };
 
-    let mut master_game_state = Arc::new(Mutex::new(GameState::new()));
+    let master_game_state = Arc::new(Mutex::new(GameState::new()));
 
     let mut threads = vec![];
 
