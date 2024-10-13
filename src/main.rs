@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 mod components;
-mod firsttry;
 mod http_server;
 mod physics_server;
 mod util;
