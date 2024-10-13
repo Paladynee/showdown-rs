@@ -12,21 +12,19 @@ addEventListener("resize", () => {
 /** @type {CanvasRenderingContext2D} */
 const ctx = canvas.getContext("2d");
 
-let bullets = [];
-
-const my_player = {
-    hp: 100,
-    x: 0,
-    y: 0,
-};
-
 const mousepos = { x: 0, y: 0 };
-
-let other_players = [];
-
 const move_speed = 500;
-
 const pressed_keys = new Set();
+
+const game_state = {
+    player: {
+        x: 0,
+        y: 0,
+        hp: 100,
+    },
+    other_players: {},
+    bullets: [],
+};
 
 addEventListener("keydown", (e) => {
     pressed_keys.add(e.key);
@@ -35,24 +33,6 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => {
     pressed_keys.delete(e.key);
 });
-
-function handle_keys(dt) {
-    if (pressed_keys.has("w")) {
-        my_player.y -= 500 * dt;
-    }
-    if (pressed_keys.has("s")) {
-        my_player.y += 500 * dt;
-    }
-    if (pressed_keys.has("a")) {
-        my_player.x -= 500 * dt;
-    }
-    if (pressed_keys.has("d")) {
-        my_player.x += 500 * dt;
-    }
-    if (pressed_keys.has("MouseLeft")) {
-        fire_bullet(mousepos.x, mousepos.y);
-    }
-}
 
 const addr = window.location.host;
 const [ip, port] = addr.split(":");
@@ -204,4 +184,22 @@ function send_game_data() {
 
     socket.send(JSON.stringify(game_state));
     // bullets = [];
+}
+
+function handle_keys(dt) {
+    if (pressed_keys.has("w")) {
+        my_player.y -= 500 * dt;
+    }
+    if (pressed_keys.has("s")) {
+        my_player.y += 500 * dt;
+    }
+    if (pressed_keys.has("a")) {
+        my_player.x -= 500 * dt;
+    }
+    if (pressed_keys.has("d")) {
+        my_player.x += 500 * dt;
+    }
+    if (pressed_keys.has("MouseLeft")) {
+        fire_bullet(mousepos.x, mousepos.y);
+    }
 }

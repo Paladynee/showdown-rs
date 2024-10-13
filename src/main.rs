@@ -14,7 +14,7 @@ mod ws_parse;
 mod ws_server;
 
 use http_server::create_http_server;
-use physics_server::create_physics_server;
+use physics_server::physics_loop;
 use ws_server::create_ws_server;
 
 fn main() {
@@ -25,7 +25,7 @@ fn main() {
         ServerMode::Development
     };
 
-    let mut master_game_state = Arc::new(Mutex::new(GameState::new()));
+    let master_game_state = Arc::new(Mutex::new(GameState::new()));
 
     let mut threads = vec![];
 
@@ -40,7 +40,7 @@ fn main() {
 
     let physics_game_state_clone = master_game_state.clone();
     let physics_server = thread::spawn(move || {
-        create_physics_server(physics_game_state_clone);
+        physics_loop(physics_game_state_clone);
     });
 
     threads.push(http_server);
