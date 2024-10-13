@@ -1,0 +1,16 @@
+[package]
+edition = "2021"
+name = "simple2Dgameserver"
+version = "0.1.0"
+
+[dependencies]
+local-ip-address = "0.6.3"
+tungstenite = "0.24.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+incremental = true
