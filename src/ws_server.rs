@@ -1,21 +1,17 @@
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::{
+    net::{IpAddr, TcpListener, TcpStream},
+    sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant},
+};
 
 use tungstenite::{Message, WebSocket};
 
-use crate::components::{GameState, GameStatePacket, Player, ServerMode, WebSocketClientData};
-use crate::variables;
-use crate::ws_parse::parse_websocket_message;
-
+use crate::components::{GameState, GameStatePacket, Player, WebSocketClientData};
+use crate::components::{WS_PORT, WS_TICKRATE};
 // -------------------------------------- WS SERVER --------------------------------------
-pub fn create_ws_server(server_mode: ServerMode, game_state_mutex: Arc<Mutex<GameState>>) {
-    let port = variables::WS_PORT;
-    let ip_addr = match server_mode {
-        ServerMode::Development => "127.0.0.1".parse().unwrap(),
-        ServerMode::Production => local_ip_address::local_ip().unwrap(),
-    };
+pub fn create_ws_server(ip_addr: IpAddr, game_state_mutex: Arc<Mutex<GameState>>) {
+    let port = WS_PORT;
 
     let ws_listener = TcpListener::bind((ip_addr, port)).unwrap();
     eprintln!("[THREAD::WS] ws://{}:{} is listening...", ip_addr, port);
@@ -62,14 +58,13 @@ fn handle_websocket_connection(
     game_state_mutex: Arc<Mutex<GameState>>,
 ) {
     let mut last_update = Instant::now();
-    let update_interval = Duration::from_secs(1) / variables::WS_TICKRATE;
+    let update_interval = Duration::from_secs(1) / WS_TICKRATE;
 
-    {
-        let mut game_state = game_state_mutex.lock().unwrap();
-        game_state
-            .players
-            .insert(ws_identifier.clone(), Player::default());
-    };
+    game_state_mutex
+        .lock()
+        .unwrap()
+        .players
+        .insert(ws_identifier.clone(), Player::default());
 
     loop {
         if websocket_tick(
@@ -102,10 +97,11 @@ fn websocket_tick(
         Ok(received_message) => {
             if received_message.is_close() {
                 eprintln!("[THREAD::WS] {}: received close message", ws_identifier);
-                {
-                    let mut lock = game_state_mutex.lock().unwrap();
-                    lock.players.remove(ws_identifier);
-                };
+                game_state_mutex
+                    .lock()
+                    .unwrap()
+                    .players
+                    .remove(ws_identifier);
                 return true;
             }
 
@@ -113,6 +109,8 @@ fn websocket_tick(
                 let text = received_message.into_text().unwrap();
                 if let Some(client_data) = parse_websocket_message(&text) {
                     update_game_state(client_data, ws_identifier, game_state_mutex);
+                } else {
+                    eprintln!("[THREAD::WS] {}: failed to parse message", ws_identifier);
                 };
             } else {
                 eprintln!("[THREAD::WS] {}: received non-text message", ws_identifier);
@@ -148,21 +146,33 @@ fn websocket_tick(
     false
 }
 
+pub fn parse_websocket_message(message: &str) -> Option<WebSocketClientData> {
+    let parsed = serde_json::from_str(message);
+    // if let Ok(msg) = &parsed {
+    //     eprintln!("Recieved message: {:#?}", msg);
+    // }
+    parsed.ok()
+}
+
 // -------------------------------------- GAMESTATE UPDATE --------------------------------------
 fn update_game_state(
     client_data: WebSocketClientData,
     ws_identifier: &str,
     game_state_mutex: &Arc<Mutex<GameState>>,
 ) {
-    if !client_data.is_valid() {
-        return;
-    }
-
     let mut game_state = game_state_mutex.lock().unwrap();
+
+    game_state.bullets.extend(client_data.new_bullets);
     let player = game_state.players.get_mut(ws_identifier);
+
     if let Some(player) = player {
-        player.x = client_data.player.x;
-        player.y = client_data.player.y;
-        player.hp = client_data.player.hp;
+        // before updating the player, check if the client_data is teleporting the player around
+        let distance = ((player.x - client_data.player.x).powi(2)
+            + (player.y - client_data.player.y).powi(2))
+        .sqrt();
+        if distance <= 50.0 {
+            player.x = client_data.player.x;
+            player.y = client_data.player.y;
+        }
     }
 }
