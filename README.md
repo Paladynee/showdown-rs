@@ -5,6 +5,18 @@ the game itself is also included, lol (written in JavaScript)
 
 # Usage
 
+clone the repository,
+
+```
+git clone https://github.com/Paladynee/showdown-rs.git
+```
+
+cd into the new directory
+
+```
+cd showdown-rs
+```
+
 to run the program,
 
 ```
